@@ -1,0 +1,9 @@
+{
+  "name": "jeonnam-promotion",
+  "private": true,
+  "type": "module",
+  "description": "전남 promotion: 전라남도 교감 자격연수 대상자 평정 점수 계산기",
+  "scripts": {
+    "test": "node tests/run.js"
+  }
+}
