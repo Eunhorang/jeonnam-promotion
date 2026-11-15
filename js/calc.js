@@ -2,12 +2,13 @@
 import * as D from './dates.js';
 import {
   CAREER, PERF, TRAINING, COMMON, ISLAND, RURAL, POST, LAB, ETC_TYPES, ETC,
-  GOOD_CLASS, RESIDENCE, selectiveMax, bonusMax,
+  GOOD_CLASS, RESIDENCE, CUTLINE, selectiveMax, bonusMax,
 } from './rules.js';
 
 const EPS = 1e-9;
 export const r3 = (x) => Math.round((x + EPS) * 1000) / 1000;
 export const r4 = (x) => Math.round((x + EPS) * 10000) / 10000;
+const r1 = (x) => Math.round((x + EPS) * 10) / 10;
 const pts = (sp, rate) => sp.months * rate[0] + sp.days * rate[1];
 
 export function num(v) {
@@ -473,6 +474,27 @@ export function calcBonus(b, evalDate, opts = {}, training) {
   };
 }
 
+/* ───────── 예상 컷트라인(어림) ───────── */
+// 그 기준일 만점에서 컷 근처 후보가 흔히 덜 채우는 몫을 뺀다. 1정 성적을 빼고 보면 만점과 그 몫도 함께 뺀다.
+export function estimateCutline(evalDate, { qualExcluded = false } = {}) {
+  const trainingMax = qualExcluded ? TRAINING.max - TRAINING.qualMax : TRAINING.max;
+  const max = CAREER.max + PERF.max + trainingMax + bonusMax(evalDate);
+  const gaps = CUTLINE.gaps.filter((g) => !(qualExcluded && g.qual) && !(g.before && evalDate >= g.before));
+  const gap = gaps.reduce((a, g) => a + g.v, 0);
+  const mid = r1(max - gap);
+  return {
+    evalDate, max: r3(max), gaps, gap: r3(gap), mid,
+    low: r1(mid - CUTLINE.below), high: r1(mid + CUTLINE.above), qualExcluded,
+  };
+}
+
+// 내 총점이 어림 범위의 어디쯤인지: 'above'(범위 위), 'within'(범위 안), 'below'(범위 아래)
+export function cutStanding(total, cut) {
+  if (total >= cut.high - EPS) return 'above';
+  if (total >= cut.low - EPS) return 'within';
+  return 'below';
+}
+
 /* ───────── 전체 ───────── */
 export function calculate(state) {
   const evalDate = D.isDate(state?.evalDate) ? state.evalDate : '2027-02-28';
@@ -491,5 +513,6 @@ export function calculate(state) {
   return {
     evalDate, career, perf, training, bonus,
     total: r4(total), max: r3(max), warnings,
+    cut: estimateCutline(evalDate, { qualExcluded: training.excluded }),
   };
 }

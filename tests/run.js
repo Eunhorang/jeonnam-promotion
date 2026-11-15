@@ -1,7 +1,7 @@
 // 계산 엔진 점검: node tests/run.js
 import assert from 'node:assert/strict';
 import * as D from '../js/dates.js';
-import { calculate, calcCareer, calcPerf, calcTraining, convertJobScore, qualPoints, jobWindowStart, contestPoints, timeToFill } from '../js/calc.js';
+import { calculate, calcCareer, calcPerf, calcTraining, convertJobScore, qualPoints, jobWindowStart, contestPoints, timeToFill, estimateCutline, cutStanding } from '../js/calc.js';
 import { bonusMax } from '../js/rules.js';
 
 let passed = 0;
@@ -114,6 +114,29 @@ t('가산점 최대값', () => {
   assert.ok(near(bonusMax('2030-02-28'), 12.05));
 });
 
+t('예상 컷: 만점에서 덜 채우는 몫을 빼고 0.1점 단위', () => {
+  const c27 = estimateCutline('2027-02-28');
+  assert.ok(near(c27.max, 211.8));
+  assert.ok(near(c27.gap, 1.71)); // 거주 몫 0.06은 옛 배점인 2027. 2. 28. 평정에만
+  assert.equal(c27.mid, 210.1);
+  assert.equal(c27.low, 209.3);
+  assert.equal(c27.high, 210.8);
+  assert.equal(estimateCutline('2028-02-29').mid, 209.9); // 연구학교 상한 1.25 → 1.0
+  assert.equal(estimateCutline('2029-02-28').mid, 210.4); // 농어촌 상한 1.0 → 1.5
+  assert.equal(estimateCutline('2032-02-29').mid, 210.4);
+  const x = estimateCutline('2029-02-28', { qualExcluded: true });
+  assert.ok(near(x.max, 203.05));
+  assert.equal(x.mid, 201.6); // 203.05 − 1.5 = 201.55 → 반올림 201.6
+});
+
+t('예상 컷: 범위 안팎', () => {
+  const c = estimateCutline('2029-02-28'); // 209.6 ~ 211.1
+  assert.equal(cutStanding(211.1, c), 'above');
+  assert.equal(cutStanding(210.0, c), 'within');
+  assert.equal(cutStanding(209.6, c), 'within');
+  assert.equal(cutStanding(209.59, c), 'below');
+});
+
 t('남은 기간 계산', () => {
   assert.deepEqual(timeToFill(0.48, [0.084, 0.0028]), { months: 5, days: 22 });
 });
@@ -143,6 +166,8 @@ t('예시 교사 전체 계산', () => {
   assert.ok(r.total > 200 && r.total < 215);
   assert.ok(r.bonus.items.island.v === 3);
   assert.ok(near(r.bonus.items.labSelect.v, 24 * 0.0167));
+  assert.equal(r.cut.mid, 210.1);
+  assert.equal(calculate({ evalDate: '2027-02-28', training: { firstGrade: { mode: 'exclude' } } }).cut.mid, 201.2);
 });
 
 console.log(`계산 엔진 점검 ${passed}개 통과`);

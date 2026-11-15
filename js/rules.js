@@ -136,6 +136,23 @@ export const RESIDENCE = {
   cap: 0.5,
 };
 
+// 예상 컷트라인(어림). 교감 자격연수 대상자 순위명부의 컷 점수는 공개된 자료가 없다
+// (명부 순위는 본인이 요청할 때만 알려 준다: 승진규정 제48조).
+// 그래서 '그 기준일 만점 − 컷 근처 후보가 흔히 덜 채우는 몫'으로 어림하고 0.1점 단위로 반올림한다.
+// 경력은 모두 만점으로 본다. 실제 컷을 알게 되면 몫(v)과 범위(below·above)부터 고친다.
+export const CUTLINE = {
+  gaps: [
+    { key: 'perf', label: '근무성적', v: 0.5, why: "해마다 '수'를 받아도 3년 모두 학교에서 1위이기는 어려워요." },
+    { key: 'qual', label: '1정 자격연수', v: 0.15, qual: true, why: '성적이 100점인 사람은 드물어요. 94점이면 0.15점이 모자라요.' },
+    { key: 'research', label: '연구실적', v: 0.1, why: '연구대회 입상과 학위로 3점을 다 채우지 못한 사람도 있어요.' },
+    { key: 'abroad', label: '재외국민교육기관 파견', v: 0.5, why: '파견 경력이 있는 후보는 거의 없어요.' },
+    { key: 'others', label: '연구학교·보직·기타 교육활동·좋은수업', v: 0.4, why: '상한까지 조금씩 남은 칸이 있어요.' },
+    { key: 'residence', label: '전라남도 거주', v: 0.06, before: RESIDENCE.changeDate, why: '옛 배점으로는 2012. 6. 1.부터 온 가족이 살았어도 0.4425점이라 0.5점에 못 미쳐요.' },
+  ],
+  below: 0.8, // 어림 범위: 가운데 값에서 0.8점 아래부터
+  above: 0.7, // 0.7점 위까지
+};
+
 // 날짜별 상한
 export function selectiveMax(evalDate) {
   const ruralCap = evalDate > RURAL.capChangeAfter ? RURAL.capAfter : RURAL.capBefore;

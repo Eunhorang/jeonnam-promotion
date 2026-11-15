@@ -438,6 +438,21 @@ input[role="switch"]:checked::after { transform: translateX(14px); }
 .remain .how { color: var(--muted); font-size: 13px; }
 .done-line, .empty-line { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
 .proj-notes { margin: 12px 0 0; padding-left: 18px; font-size: 13px; line-height: 20px; color: var(--muted); }
+
+/* 예상 컷: 보는 기준일 줄만 밝히고, 차이 아래에 범위 안팎을 적는다 */
+.cut tr.current { background: var(--active); }
+.cut tr.current th, .cut tr.current td { border-bottom-color: transparent; }
+.cut .standing { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.cut .sub-row { display: none; }
+.method { margin: 10px 0 0; }
+.method summary { width: fit-content; padding: 6px 0; cursor: pointer; font-size: 14px; line-height: 20px; font-weight: 500; }
+.method summary:hover { text-decoration: underline; text-decoration-color: var(--control-hover); text-underline-offset: 3px; }
+.method .calc-line { margin-top: 8px; }
+.method .notes { margin-top: 10px; }
+.method .notes + .notes { margin-top: 14px; }
+.method .notes b { font-weight: 600; color: var(--text); }
+.cut-link { margin-top: 2px; text-decoration: none; }
+.cut-link:hover { color: var(--text); }
 .empty-line { margin: 0; }
 
 /* 넘어온 점수 */
@@ -548,6 +563,7 @@ dialog .btns { justify-content: flex-end; }
     padding: 12px 14px 28px;
   }
   .btn.menu-close { display: inline-flex; height: 40px; }
+  .card, .set-row { scroll-margin-top: 68px; } /* 위에 붙은 52px 막대 아래로 */
   .t-row { min-height: 40px; align-content: center; }
   .t-row.leaf { min-height: 36px; }
 }
@@ -575,6 +591,14 @@ dialog .btns { justify-content: flex-end; }
   .proj .now { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .proj .sub-row { display: block; grid-column: 1 / -1; margin-top: 4px; font-size: 12px; color: var(--muted); }
   .proj tr.current { border-radius: var(--radius-control); }
+  .cut, .cut thead, .cut tbody { display: block; }
+  .cut tr { display: grid; grid-template-columns: minmax(0, 1fr) 64px 112px; column-gap: 12px; align-items: center; padding: 10px 8px; border-bottom: 1px solid var(--rule); }
+  .cut thead tr { padding: 0 8px 8px; }
+  .cut th, .cut td { padding: 0; border: 0; }
+  .cut .now { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .cut .sub-row { display: block; grid-column: 1 / -1; margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .cut tr.current { border-radius: var(--radius-control); }
+  .method summary { padding: 12px 0; }
   .set-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   input[type="text"], input[type="date"], select { height: 44px; font-size: 16px; }
   .btn { height: 44px; }

@@ -2,9 +2,9 @@
 import * as D from './dates.js';
 import {
   EVAL_DATES, CAREER, PERF, TRAINING, COMMON, ISLAND, RURAL, POST, LAB, ETC_TYPES, ETC,
-  GOOD_CLASS, RESIDENCE, RULESET_LABEL,
+  GOOD_CLASS, RESIDENCE, RULESET_LABEL, CUTLINE,
 } from './rules.js';
-import { calculate, timeToFill, contestPoints, num } from './calc.js';
+import { calculate, timeToFill, contestPoints, num, cutStanding } from './calc.js';
 import {
   esc, fx, f3, f4, capText, bar, span, date, dash, cell, dateInput, textInput, numInput,
   selectInput, toggle, removeBtn, addBtn, evalLabel,
@@ -121,7 +121,8 @@ export function ledgerTotals(S, R) {
       <span class="total-label">총점</span>
       <span class="total-value num">${f4(R.total)}</span>
     </a>
-    <p class="total-sub"><span>만점</span><span class="num">${R.max.toFixed(3)}</span></p>`;
+    <p class="total-sub"><span>만점</span><span class="num">${R.max.toFixed(3)}</span></p>
+    <a class="total-sub cut-link" href="#/overview/cut"><span>예상 컷(어림)</span><span class="num">${R.cut.mid.toFixed(1)}</span></a>`;
 }
 
 export function ledgerTree(S, R, routeHash) {
@@ -252,6 +253,15 @@ function hasAnyData(S) {
     || num(b.goodClass.school) || num(b.eduMerit.years);
 }
 
+// 기준일마다 다시 계산한 결과. 같은 R에서는 한 번만 계산한다.
+const byDateCache = new WeakMap();
+function byDate(S, R) {
+  if (!byDateCache.has(R)) byDateCache.set(R, EVAL_DATES.map((d) => (d === R.evalDate ? R : calculate({ ...S, evalDate: d }))));
+  return byDateCache.get(R);
+}
+
+const CUT_STANDING = { above: '범위보다 위', within: '범위 안', below: '범위보다 아래' };
+
 const overview = {
   title: '평정 총괄',
   outs: {
@@ -276,12 +286,13 @@ const overview = {
         ${row('경력평정', 'career', R.career.total, CAREER.max, 3)}
         ${row('근무성적평정', 'perf', R.perf.score, PERF.max, 3)}
         ${row('연수성적평정', 'training', R.training.total, R.training.max, 3)}
-        ${row('가산점', 'bonus-common', R.bonus.total, R.bonus.max.toFixed(2), 4)}`;
+        ${row('가산점', 'bonus-common', R.bonus.total, R.bonus.max.toFixed(2), 4)}
+        <a class="ps-row" href="#/overview/cut"><span>예상 컷(어림)</span><span class="num">${R.cut.mid.toFixed(1)}</span></a>`;
     },
     projection(S, R) {
       let prev = null;
-      const body = EVAL_DATES.map((d) => {
-        const r = d === R.evalDate ? R : calculate({ ...S, evalDate: d });
+      const body = byDate(S, R).map((r) => {
+        const d = r.evalDate;
         const delta = prev === null ? null : r.total - prev;
         prev = r.total;
         const current = d === R.evalDate;
@@ -305,7 +316,7 @@ const overview = {
         <tbody>${body}</tbody></table></div>`;
     },
     projNotes(S, R) {
-      const rs = EVAL_DATES.map((d) => (d === R.evalDate ? R : calculate({ ...S, evalDate: d })));
+      const rs = byDate(S, R);
       const out = [];
       for (let i = 1; i < rs.length; i++) {
         const a = rs[i - 1];
@@ -321,6 +332,47 @@ const overview = {
         if (labB < labA - 1e-6) out.push(`${date(b.evalDate)} 평정부터 연구학교 배점이 내려가 연구학교 점수가 ${f4(labA - labB)}점 줄어요.`);
       }
       return out.length ? `<ul class="proj-notes">${out.map((n) => `<li>${n}</li>`).join('')}</ul>` : '';
+    },
+    cutline(S, R) {
+      const has = hasAnyData(S);
+      const body = byDate(S, R).map((r) => {
+        const c = r.cut;
+        const current = r.evalDate === R.evalDate;
+        const diff = r.total - c.mid;
+        const range = `${c.low.toFixed(1)}~${c.high.toFixed(1)}`;
+        const dl = !has ? dash()
+          : `${Math.abs(diff) < 0.005 ? '<span class="zero">0.00</span>'
+            : `<span class="${diff > 0 ? 'up' : 'down'}">${diff > 0 ? '+' : '−'}${Math.abs(diff).toFixed(2)}</span>`}<span class="standing">${CUT_STANDING[cutStanding(r.total, c)]}</span>`;
+        return `<tr${current ? ' aria-current="true" class="current"' : ''}>
+          <th scope="row">${date(r.evalDate)}${current ? '<span class="now">보는 중</span>' : ''}</th>
+          <td class="num hide-s">${c.max.toFixed(3)}</td>
+          <td class="num strong">${c.mid.toFixed(1)}</td>
+          <td class="num hide-s">${range}</td>
+          <td class="num hide-s">${has ? f4(r.total) : dash()}</td>
+          <td class="num">${dl}</td>
+          <td class="sub-row">만점 ${c.max.toFixed(3)} · 범위 ${range}${has ? ` · 내 총점 ${f4(r.total)}` : ''}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="tbl-wrap"><table class="tbl cut">
+        <thead><tr><th scope="col">평정 기준일</th><th scope="col" class="num hide-s">만점</th><th scope="col" class="num">예상 컷</th>
+        <th scope="col" class="num hide-s">어림 범위</th><th scope="col" class="num hide-s">내 총점</th><th scope="col" class="num">컷과 차이</th></tr></thead>
+        <tbody>${body}</tbody></table></div>`;
+    },
+    cutMethod(S, R) {
+      const c = R.cut;
+      const lastBefore = (d) => EVAL_DATES.filter((x) => x < d).at(-1);
+      const items = c.gaps.map((g) => `<li><b>${esc(g.label)} ${g.v}점</b>: ${esc(g.why)}${g.before ? ` ${date(lastBefore(g.before))} 평정에서만 빼요.` : ''}</li>`).join('');
+      return `<details class="method">
+        <summary>어떻게 어림했나요</summary>
+        <p class="calc-line">${date(c.evalDate)} 평정은 만점 <b class="num">${c.max.toFixed(3)}</b>점에서 아래 몫 <b class="num">${f3(c.gap)}</b>점을 빼고 0.1점 단위로 반올림해 <b class="num">${c.mid.toFixed(1)}</b>점으로 잡았어요.</p>
+        <ul class="notes">${items}</ul>
+        <ul class="notes">
+          <li>경력은 모두 만점으로 봤어요. 어림 범위는 이 값보다 ${CUTLINE.below}점 낮은 데서 ${CUTLINE.above}점 높은 데까지예요.</li>
+          <li>2028. 2. 29. 평정은 연구학교 상한이 ${LAB.old.cap}점에서 ${LAB.new.cap.toFixed(1)}점으로 내려가 예상 컷도 내려가지만 2029. 2. 28. 평정부터는 농어촌 상한이 ${RURAL.capAfter.toFixed(1)}점으로 올라 컷도 다시 올라가요. 그 뒤 해는 규정이 그대로라고 보고 같은 값을 썼어요.</li>
+          ${c.qualExcluded ? '<li>1정 자격연수 성적을 빼고 계산하는 중이라 만점과 예상 컷에서도 그 몫을 뺐어요.</li>' : ''}
+          <li>실제 컷은 교육지원청 인사 담당 장학사나 최근에 대상자가 된 선생님께 물어보는 편이 더 정확해요.</li>
+        </ul>
+      </details>`;
     },
     projCaption(S) {
       const a = ['끝난 날을 비워 둔 근무는 그 기준일까지 이어진다고 보고 계산했어요.'];
@@ -358,6 +410,7 @@ const overview = {
       ${card('', o('phone', { cls: 'ps' }), { cls: 'phone-only' })}
       ${o('warnings')}
       ${card('기준일별 전망', o('projection') + o('projNotes'), { id: 'sec-proj', caption: `<span data-out="projCaption">${this.outs.projCaption(S)}</span> 줄을 누르면 그 기준일로 바꿔 봐요.` })}
+      ${card('기준일별 예상 컷트라인', o('cutline') + o('cutMethod'), { id: 'sec-cut', caption: '공개된 컷 점수가 없어서 기준일 만점에서 컷 근처 후보가 흔히 덜 채우는 몫을 빼 어림했어요. 실제 컷과는 1점 넘게 차이 날 수도 있으니 참고로만 보세요.' })}
       ${card('남은 점수와 채우는 길', o('remaining'), { id: 'sec-remain', caption: '상한까지 남은 항목이에요. 채우는 길은 지금 배점으로 어림한 기간과 횟수예요.' })}`;
   },
 };
@@ -1138,6 +1191,7 @@ const about = {
       ]))}
       ${card('알아 두실 점', notes([
         '이 계산기는 공식 프로그램이 아니에요. 점수는 참고용이고 실제 점수는 해마다 나오는 처리요령과 교육청 확인 결과를 따라요.',
+        '첫 화면의 예상 컷트라인은 공개된 자료 없이 규정의 만점 구조로 어림한 값이에요. 실제 컷과 다를 수 있어요.',
         '입력한 자료는 이 브라우저 저장소에만 남고 어디로도 보내지 않아요. 공용 컴퓨터라면 다 본 뒤 설정에서 지워 주세요.',
         '기간은 처리요령처럼 개월과 일로 나눠 세어요. 가산점은 소수 넷째 자리까지 보여 줘요.',
       ]))}`;
