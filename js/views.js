@@ -423,56 +423,71 @@ const career = {
 };
 
 /* ───────── 근무성적평정 ───────── */
+const n3 = (x) => String(Math.round(x * 1000) / 1000);
+
 const perf = {
   title: '근무성적평정',
   outs: {
     finding(S, R) {
       const p = R.perf;
       const ys = p.years;
-      if (!p.count) return `${ys[0]}~${ys[ys.length - 1]}학년도 가운데 유리한 3년을 골라요. 학년도별 평정점을 넣어 주세요.`;
-      return `${ys[0]}~${ys[ys.length - 1]}학년도 가운데 ${p.picked.map((y) => `${y}`).join(', ')}학년도를 골라 <b class="num">${f3(p.score)}</b>점이에요.`;
+      const range = `${ys[0]}~${ys[ys.length - 1]}학년도`;
+      if (!p.count) return `${range} 가운데 유리한 3년을 골라요. 학년도별 평정점을 넣어 주세요.`;
+      const fill = p.filled.length ? ` 근평이 빈 해 ${p.filled.length}개는 앞뒤 해 평균으로 채웠어요.` : '';
+      return `${range} 가운데 ${p.picked.join(', ')}학년도를 골라 <b class="num">${f3(p.score)}</b>점이에요.${fill}`;
     },
     kpi(S, R) {
       const p = R.perf;
+      const sub = [];
+      if (p.filled.length) sub.push(`앞뒤 평균으로 채운 해 ${p.filled.length}개`);
+      if (p.assumed.length) sub.push(`어림한 해 ${p.assumed.length}개`);
       return kpis([
         { label: '근무성적평정', v: p.score, cap: PERF.max, capLabel: String(PERF.max), dp: 3 },
-        { label: '넣은 해', v: p.count - p.assumed.length, dp: 0, sub: p.assumed.length ? `어림한 해 ${p.assumed.length}개` : '5년 가운데' },
+        { label: '점수를 넣은 해', text: `${p.actual}년`, sub: sub.join(' · ') || '5년 가운데' },
       ]);
     },
     use(S, R, y) {
       const p = R.perf;
       const yy = Number(y);
+      if (!p.years.includes(yy)) {
+        // 평정 기간 바로 앞 해: 빈 해를 채울 때 앞 점수로만 쓴다
+        return Object.values(p.fillInfo).some((f) => f.beforeYear === yy) ? '빈 해를 채울 때 씀' : dash();
+      }
+      if (p.vals[yy] === undefined) return dash();
       const i = p.picked.indexOf(yy);
-      const assumed = p.assumed.includes(yy);
       const w = p.picked.length === 3 ? PERF.weights : p.picked.length === 2 ? [0.5, 0.5] : [1];
-      const tag = assumed ? '<span class="rv-note">어림</span> ' : '';
-      if (i >= 0) return `${tag}${Math.round(w[i] * 100)}% 반영`;
-      if (num(S.perf.scores[y]) === null && !assumed) return dash();
-      return `${tag}<span class="zero">빼고 계산</span>`;
+      const share = i >= 0 ? `${Math.round(w[i] * 100)}% 반영` : '<span class="zero">빼고 계산</span>';
+      if (p.filled.includes(yy)) {
+        const f = p.fillInfo[yy];
+        const before = f.beforeYear === null ? '85(앞 점수 없음)' : n3(f.before);
+        return `${share}<span class="rv-hint">앞뒤 평균 ${f3(p.vals[yy])} = <span class="nw">(${n3(f.after)} + ${before}) ÷ 2</span></span>`;
+      }
+      if (p.assumed.includes(yy)) return `${share}<span class="rv-hint">어림 ${f3(p.vals[yy])}(마지막으로 넣은 점수)</span>`;
+      return share;
     },
   },
   render(S, R) {
     const o = (k, opt) => slot(this, k, S, R, opt);
     const ys = [...R.perf.years].reverse();
-    const lastEntered = Object.keys(S.perf.scores).map(Number).filter((y) => num(S.perf.scores[y]) !== null).sort((a, b) => b - a)[0];
+    const prev = R.perf.years[0] - 1;
+    const row = (y, isPrev) => `<div class="r${isPrev ? ' r-prev' : ''}" role="listitem">
+        <span class="ry">${y}학년도<span class="sub">${isPrev ? '평정 기간 앞 해 · 빈 해를 채울 때만 써요' : `${y}. 3. 1.~${y + 1}. 2. ${D.daysInMonth(y + 1, 2)}.`}</span></span>
+        ${cell(`${y}학년도 평정점`, numInput({ path: `perf.scores.${y}` }, S.perf.scores[y] ?? '', { placeholder: '100점 만점' }))}
+        <span class="rv num" data-out="use:${y}">${this.outs.use(S, R, String(y))}</span>
+      </div>`;
     const list = `<div class="rows rows-perf" role="list"><div class="rhead" aria-hidden="true"><span>학년도</span><span class="num">평정점</span><span class="num">반영</span></div>
-      ${ys.map((y) => {
-        const ph = R.perf.assumed.includes(y) && lastEntered ? `${S.perf.scores[lastEntered]} 어림` : '100점 만점';
-        return `<div class="r" role="listitem">
-          <span class="ry">${y}학년도<span class="sub">${y}. 3. 1.~${y + 1}. 2. ${D.daysInMonth(y + 1, 2)}.</span></span>
-          ${cell(`${y}학년도 평정점`, numInput({ path: `perf.scores.${y}` }, S.perf.scores[y] ?? '', { placeholder: ph }))}
-          <span class="rv num" data-out="use:${y}">${this.outs.use(S, R, String(y))}</span>
-        </div>`;
-      }).join('')}</div>`;
+      ${ys.map((y) => row(y, false)).join('')}${row(prev, true)}</div>`;
     return `${head(this, S, R, '근무성적평정')}
       ${card('', o('kpi'), { cls: 'card-kpi' })}
-      ${card('학년도별 평정점', list, { id: 'sec-years', caption: '해마다 통보받은 근무성적평정점(다면평가 포함, 100점 만점)을 넣으세요.' })}
+      ${card('학년도별 평정점', list, { id: 'sec-years', caption: '해마다 통보받은 근무성적평정점(다면평가 포함, 100점 만점)을 넣으세요. 휴직 등으로 근평이 없는 해는 비워 두면 규정대로 채워요.' })}
       ${card('계산 방법', notes([
         '기준일 전 5년(학년도) 가운데 유리한 3년을 골라 기준일에 가장 가까운 해에 34%, 나머지 두 해에 33%를 곱해 더해요.',
-        '3년이 안 되면 넣은 해만으로 계산해요. 이때는 실제 평정과 다를 수 있어요.',
+        '근평이 없는 해는 승진규정 제40조 제5항대로 그해 앞뒤에 받은 점수의 평균으로 채워요. 앞에 받은 점수가 없으면 85점으로 봐요.',
+        '가까운 해부터 차례로 채워요. 채운 값은 그보다 앞 해를 채울 때 뒤 점수가 돼요. 교육부 인사실무 예시로는 95점 다음 두 해가 90점, 87.5점이에요.',
+        '평정 기간 첫해가 비면 맨 아래 칸(평정 기간 앞 해)에 넣은 점수를 앞 점수로 써요.',
         S.options.perfFillForward !== false
           ? '마지막으로 넣은 해 뒤의 빈 해는 그 점수를 그대로 받는다고 어림해요. 설정에서 끌 수 있어요.'
-          : '앞날의 근평 어림을 꺼 두었어요. 넣은 해만으로 계산해요.',
+          : '앞날의 근평 어림을 꺼 두었어요. 마지막으로 넣은 해 뒤는 비워 둔 채 계산해요.',
       ]), { cls: 'card-notes' })}`;
   },
 };

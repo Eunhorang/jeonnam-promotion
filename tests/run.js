@@ -53,6 +53,26 @@ t('근평: 앞날의 빈 해는 마지막 점수로 어림', () => {
   assert.deepEqual(q.assumed, []);
 });
 
+t('근평 빈 해: 교육부 인사실무 예시(95 → 90 → 87.5)', () => {
+  const p = calcPerf({ 2025: 95 }, '2026-02-28');
+  assert.equal(p.vals[2024], 90);
+  assert.equal(p.vals[2023], 87.5);
+  assert.deepEqual(p.filled, [2021, 2022, 2023, 2024]);
+  assert.deepEqual(p.picked, [2025, 2024, 2023]);
+  assert.ok(near(p.score, 95 * 0.34 + 90 * 0.33 + 87.5 * 0.33));
+});
+
+t('근평 빈 해: 앞 점수는 평정 기간 밖의 가장 가까운 해', () => {
+  // 2021·2022 휴직, 앞 점수는 2020년 98점, 뒤 점수는 2023년 96점
+  const p = calcPerf({ 2020: 98, 2023: 96, 2024: 97 }, '2026-02-28');
+  assert.equal(p.vals[2022], 97); // (96 + 98) ÷ 2
+  assert.equal(p.vals[2021], 97.5); // (97 + 98) ÷ 2
+  assert.equal(p.fillInfo[2021].beforeYear, 2020);
+  assert.deepEqual(p.picked, [2024, 2022, 2021]);
+  assert.ok(near(p.score, 97.165));
+  assert.equal(p.vals[2025], undefined); // 어림을 끄면 마지막 해 뒤는 비워 둠
+});
+
 t('연수: 1정 92점은 8.8, 성적 없으면 8.5', () => {
   assert.ok(near(qualPoints({ score: 92 }).points, 8.8));
   assert.ok(near(qualPoints({ mode: 'nograde' }).points, 8.5));

@@ -110,21 +110,51 @@ function combos(arr, k, start = 0, acc = [], out = []) {
   return out;
 }
 
+// 근평이 없는 해(휴직 등)는 승진규정 제40조 제5항대로 그해 앞뒤에 받은 점수의 평균으로 채운다.
+// 앞에 받은 점수가 없으면 85점으로 본다. 교육부 인사실무(2016) 예시처럼 가까운 해부터 채우고,
+// 채운 값은 그보다 앞 해를 채울 때 '뒤 점수'로 쓴다(95 → 90 → 87.5). 앞 점수는 평정 기간 밖이어도 쓴다.
 // fillForward: 마지막으로 넣은 해 뒤의 빈 해는 그 점수를 그대로 받는다고 어림한다(앞날 전망용).
 export function calcPerf(scores, evalDate, opts = {}) {
   const years = perfYears(evalDate);
-  const entered = Object.keys(scores || {}).map(Number).filter((y) => Number.isInteger(y) && num(scores[y]) !== null);
-  const lastY = entered.length ? Math.max(...entered) : null;
+  const lastWin = years[years.length - 1];
+  const entered = new Map(); // 기준일 전에 받은 실제 점수(평정 기간 앞 해 포함)
+  for (const key of Object.keys(scores || {})) {
+    const y = Number(key);
+    const v = num(scores[key]);
+    if (Number.isInteger(y) && y <= lastWin && v !== null && v >= 0 && v <= 100) entered.set(y, v);
+  }
+  const lastY = entered.size ? Math.max(...entered.keys()) : null;
+  const vals = new Map();
   const assumed = [];
-  const avail = years.map((y) => {
-    let v = num(scores?.[y]);
-    if (v === null && opts.fillForward && lastY !== null && y > lastY) {
-      v = num(scores[lastY]);
+  const filled = [];
+  const fillInfo = {};
+  for (const y of years) {
+    if (entered.has(y)) vals.set(y, entered.get(y));
+    else if (opts.fillForward && lastY !== null && y > lastY) {
+      vals.set(y, entered.get(lastY));
       assumed.push(y);
     }
-    return { y, v };
-  }).filter((o) => o.v !== null && o.v >= 0 && o.v <= 100);
-  if (!avail.length) return { score: 0, picked: [], years, max: PERF.max, count: 0, assumed: [] };
+  }
+  if (lastY !== null) {
+    for (const y of [...years].reverse()) {
+      if (vals.has(y) || y > lastY) continue;
+      let after = null;
+      for (let k = y + 1; k <= lastY && after === null; k++) if (vals.has(k)) after = vals.get(k);
+      const earlier = [...entered.keys()].filter((k) => k < y);
+      const beforeYear = earlier.length ? Math.max(...earlier) : null;
+      const before = beforeYear === null ? 85 : entered.get(beforeYear);
+      const v = r3((after + before) / 2);
+      vals.set(y, v);
+      filled.push(y);
+      fillInfo[y] = { after, before, beforeYear };
+    }
+  }
+  const avail = years.filter((y) => vals.has(y)).map((y) => ({ y, v: vals.get(y) }));
+  const base = {
+    years, max: PERF.max, count: avail.length, assumed, filled: filled.sort((a, b) => a - b), fillInfo,
+    vals: Object.fromEntries(vals), actual: years.filter((y) => entered.has(y)).length,
+  };
+  if (!avail.length) return { ...base, score: 0, picked: [] };
   const k = Math.min(PERF.pick, avail.length);
   const w = k === 3 ? PERF.weights : k === 2 ? [0.5, 0.5] : [1];
   let best = null;
@@ -133,10 +163,7 @@ export function calcPerf(scores, evalDate, opts = {}) {
     const s = sorted.reduce((acc, o, i) => acc + o.v * w[i], 0);
     if (!best || s > best.s + EPS) best = { s, c: sorted };
   }
-  return {
-    score: r3(best.s), picked: best.c.map((o) => o.y), years, max: PERF.max, count: avail.length,
-    assumed: assumed.filter((y) => avail.some((o) => o.y === y)),
-  };
+  return { ...base, score: r3(best.s), picked: best.c.map((o) => o.y) };
 }
 
 /* ───────── 연수성적평정(30) ───────── */
@@ -458,7 +485,8 @@ export function calculate(state) {
   const max = career.max + perf.max + training.max + bonus.max;
   const warnings = [...bonus.warnings];
   if (career.overlap) warnings.push('경력 기간이 서로 겹쳐요. 겹친 기간은 한 번만 넣어 주세요.');
-  if (perf.count && perf.count < 3) warnings.push('근무성적은 5년 가운데 3년이 필요해요. 빈 해는 교육청이 앞뒤 해 평균 등으로 채우니 실제와 다를 수 있어요.');
+  if (perf.filled.length) warnings.push(`근평이 빈 ${perf.filled.join('·')}학년도는 앞뒤 해 점수의 평균으로 채웠어요(앞에 받은 점수가 없으면 85점). 실제로 받은 점수가 있으면 넣어 주세요.`);
+  else if (perf.count && perf.count < 3) warnings.push('근무성적은 5년 가운데 3년을 골라요. 넣은 해가 3년이 안 되어 그 해들만으로 계산했어요.');
   if (state?.requirements?.koreanHistory === false) warnings.push('한국사능력검정 3급 이상이나 한국사 연수 60시간 이상이 없으면 순위명부에 오를 수 없어요.');
   return {
     evalDate, career, perf, training, bonus,

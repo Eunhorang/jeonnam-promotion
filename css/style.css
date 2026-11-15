@@ -348,6 +348,7 @@ input[role="switch"]:checked::after { transform: translateX(14px); }
 .rv-note { color: var(--muted); font-size: 12px; }
 .rv-hint { display: block; color: var(--muted); font-size: 12px; white-space: normal; }
 .rv-warn { display: block; color: var(--warn-ink); font-size: 12px; white-space: normal; }
+.nw { white-space: nowrap; }
 .remove { justify-self: end; }
 
 .rows-career { --cols: minmax(132px, 156px) minmax(132px, 156px) 96px 112px minmax(110px, 1fr) 132px 48px; }
@@ -361,7 +362,8 @@ input[role="switch"]:checked::after { transform: translateX(14px); }
 .rows-award { --cols: 100px 160px minmax(92px, 1fr) 48px; }
 .rows-cert { --cols: minmax(160px, 1fr) minmax(120px, 200px) 128px 48px; }
 .rows-home { --cols: 140px minmax(132px, 156px) minmax(132px, 156px) minmax(92px, 1fr) 48px; }
-.rows-perf { --cols: minmax(150px, 1fr) 168px 168px; }
+.rows-perf { --cols: minmax(150px, 1fr) 168px 260px; }
+.rows-perf .r-prev .ry { font-weight: 400; color: var(--muted); }
 .ry { font-size: 14px; font-weight: 500; }
 .ry .sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 
@@ -400,6 +402,7 @@ input[role="switch"]:checked::after { transform: translateX(14px); }
   }
   .rows-perf .r { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; row-gap: 6px; padding: 12px 0; }
   .rows-perf .ry { grid-column: 1 / -1; }
+  .rows-perf .rv { white-space: normal; text-align: right; }
   .rows-period .cl, .rows-award .cl, .rows-cert .cl, .rows-home .cl {
     position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal;
     font-size: 12px; font-weight: 400; color: var(--muted); margin-bottom: 4px;
